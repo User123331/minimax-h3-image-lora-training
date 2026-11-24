@@ -1,0 +1,51 @@
+# diffusion-pipe training config for a MiniMax H3 Image style LoRA on one 80 GB GPU.
+# setup.sh copies this to $WORKDIR/lora/<PROJECT>/config.toml with the paths filled in.
+output_dir = '/workspace/lora/mystyle/output'
+dataset = '/workspace/lora/mystyle/dataset.toml'
+
+# 40 images at batch 1 = 40 steps per epoch, 1,600 steps in total
+epochs = 40
+micro_batch_size_per_gpu = 1
+# diffusion-pipe drops the leftover images of each aspect-ratio bucket that cannot fill
+# batch x accumulation; 1 x 1 drops none
+image_micro_batch_size_per_gpu = 1
+pipeline_stages = 1
+gradient_accumulation_steps = 1
+gradient_clipping = 1
+warmup_steps = 10
+
+# one LoRA every 2 epochs (80 steps) to compare; full state every 30 min to resume
+save_every_n_epochs = 2
+checkpoint_every_n_minutes = 30
+activation_checkpointing = 'unsloth'
+partition_method = 'parameters'
+save_dtype = 'bfloat16'
+caching_batch_size = 1
+steps_per_print = 1
+compile = true
+# no blocks_to_swap: the int8 base fits in 80 GB; add blocks_to_swap = 16 on out-of-memory
+
+[model]
+type = 'minimax_h3'
+diffusion_model = '/workspace/models/diffusion_models/minimax_h3_image_pruned_int8_convrot.safetensors'
+vae = '/workspace/models/vae/minimax_h3_image_vae_fp16.safetensors'
+text_encoders = [
+    {path = '/workspace/models/text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors', type = 'minimax'}
+]
+dtype = 'bfloat16'
+timestep_sample_method = 'logit_normal'
+# merged into the base for training only; keeps the LoRA usable at 6 steps without CFG.
+# With the adapter: no cfg = ... line (CFG-augmented training is the alternative, not an addition)
+merge_adapters = ['/workspace/models/adapters/minimax_h3_image_undistill_lora.safetensors']
+
+[adapter]
+type = 'lora'
+rank = 32
+dtype = 'bfloat16'
+
+[optimizer]
+type = 'adamw_optimi'
+lr = 5e-5
+betas = [0.9, 0.99]
+weight_decay = 0.01
+eps = 1e-8
