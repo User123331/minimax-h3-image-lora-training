@@ -93,7 +93,7 @@ for f in "${FILES[@]}"; do
 done
 
 say "PyTorch (CUDA 13) and diffusion-pipe requirements"
-"$PY" -m pip install -q torch torchvision --index-url "$TORCH_INDEX"
+"$PY" -m pip install -q torch torchvision torchaudio --index-url "$TORCH_INDEX"
 "$PY" -m pip install -q -r "$DP/requirements.txt"
 "$PY" -m pip install -q tensorboard pillow
 
@@ -110,7 +110,7 @@ for c in dataset.toml config.toml; do
   echo "  wrote $PROJ/$c"
 done
 
-"$PY" -c "import torch; assert torch.cuda.is_available(), 'CUDA not available'; print('torch', torch.__version__, '·', torch.cuda.get_device_name(0))"
+"$PY" -c "import torch, torchaudio; assert torch.cuda.is_available(), 'CUDA not available'; print('torch', torch.__version__, '·', torch.cuda.get_device_name(0))"
 say "done"
 cat <<INFO
   put the labeled images in   $PROJ/dataset
