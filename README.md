@@ -128,6 +128,7 @@ Copy each saved LoRA under a name that says its epoch:
 
 ```bash
 RUN=$(ls -td /workspace/lora/mystyle/output/*/ | head -n1)
+rm -f /workspace/ComfyUI/models/loras/mystyle_epoch*.safetensors     # drop epochs from an earlier run
 for d in "$RUN"epoch*/; do e=$(basename "$d"); cp "$d/adapter_model.safetensors" "/workspace/ComfyUI/models/loras/mystyle_$e.safetensors"; done
 ```
 
