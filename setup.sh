@@ -72,7 +72,12 @@ fi
 
 say "diffusion-pipe and its venv"
 mkdir -p "$LORA_DIR" "$MODELS"
+# one submodule's LFS images fail to download, which aborts a normal recursive clone
+export GIT_LFS_SKIP_SMUDGE=1
 [[ -d "$DP/.git" ]] || git clone --recurse-submodules https://github.com/tdrussell/diffusion-pipe "$DP"
+git -C "$DP" submodule update --init --recursive || warn "some diffusion-pipe submodules did not check out"
+[[ -f "$DP/submodules/ComfyUI/comfy/sd.py" && -d "$DP/submodules/HunyuanVideo/hyvideo" ]] \
+  || die "diffusion-pipe submodules are missing: delete $DP and run setup.sh again"
 [[ -x "$VENV/bin/python" ]] || python3 -m venv "$VENV"
 PY="$VENV/bin/python"
 "$PY" -m pip install -q -U pip huggingface_hub
