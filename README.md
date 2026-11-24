@@ -2,7 +2,7 @@
 
 Train a style LoRA for MiniMax H3 Image (example trigger word: `mystyle`) on a rented H100 80 GB with [diffusion-pipe](https://github.com/tdrussell/diffusion-pipe), then test it in ComfyUI.
 
-**Status: nothing here has been run on a GPU yet.** Commands and settings come from the docs of [diffusion-pipe](https://github.com/tdrussell/diffusion-pipe), its [MiniMax H3 notes](https://github.com/tdrussell/diffusion-pipe/blob/main/docs/minimax_h3_notes.md), the [Undistill adapter](https://huggingface.co/circlestone-labs/MiniMax-H3-Image-Undistill-Lora) and [Unsloth's H3 Image training page](https://unsloth.ai/docs/models/minimax-h3-image/fine-tune-minimax-h3-image), read on 2026-11-24. Times and costs are estimates.
+**Status: one full training run has been done with this repo on an H100**, with the shipped settings (only `epochs` changed). It turned up the setup problems fixed since: missing system packages, a half-built venv kept after a crash, `/workspace` not being a volume, macOS `._*` files in the dataset, and no ComfyUI to test with. That run recorded no seconds per step, GPU memory or run time, so the times and costs below are still estimates. Commands and settings come from the docs of [diffusion-pipe](https://github.com/tdrussell/diffusion-pipe), its [MiniMax H3 notes](https://github.com/tdrussell/diffusion-pipe/blob/main/docs/minimax_h3_notes.md), the [Undistill adapter](https://huggingface.co/circlestone-labs/MiniMax-H3-Image-Undistill-Lora) and [Unsloth's H3 Image training page](https://unsloth.ai/docs/models/minimax-h3-image/fine-tune-minimax-h3-image), read on 2026-11-24. Times and costs are estimates.
 
 ## Repo
 
@@ -11,6 +11,7 @@ Train a style LoRA for MiniMax H3 Image (example trigger word: `mystyle`) on a r
 | `setup.sh` | Installs diffusion-pipe in its own venv, downloads the training files, creates the project folder with the configs |
 | `configs/config.toml`, `configs/dataset.toml` | Training and dataset configs (copied into the project folder by `setup.sh`) |
 | `tools/check_captions.py` | Checks a labeled dataset and stages image + caption pairs for training |
+| `tools/render_epochs.py`, `workflows/h3_image_lora_test_api.json` | Queues one ComfyUI render per saved epoch (same seed and prompt) plus one without the LoRA |
 | `docs/dataset-labeling-guide.md` | How to label the dataset (for a vision agent) |
 | `docs/minimax-h3-image-lora-training-guide.md` | Research notes: trainers, dataset, settings, GPU prices |
 
@@ -51,9 +52,11 @@ df -h /workspace
 ```bash
 cd /workspace
 git clone https://github.com/User123331/minimax-h3-image-lora-training && cd minimax-h3-image-lora-training
-bash setup.sh --dry-run        # GPU, files, disk
-bash setup.sh
+bash setup.sh --dry-run        # GPU, files, disk, missing system packages
+bash setup.sh                  # or: bash setup.sh --comfyui, to also install ComfyUI for step 6
 ```
+
+`setup.sh` installs the system packages PyTorch images often lack (`python3.X-venv`, `python3.X-dev`, `unzip`) with `apt-get`, recreates a venv left half-built by an interrupted run, and creates `/workspace` if it does not exist. If it warns that `/workspace` is on the root filesystem, the pod has no volume mounted there: the free space shown is the root disk's, and the files may not survive a restart, so attach a volume at `/workspace` first if you can.
 
 It creates:
 
@@ -66,7 +69,7 @@ It creates:
 | `/workspace/models/adapters/minimax_h3_image_undistill_lora.safetensors` | Undistill adapter, 0.6 GB |
 | `/workspace/lora/mystyle/` | project: `dataset/`, `train/`, `output/`, `config.toml`, `dataset.toml` |
 
-Overrides are at the top of `setup.sh` (`PROJECT=` for another style name, `WORKDIR=`, `MODELS=`). If ComfyUI is already on the pod with these files in `/workspace/ComfyUI/models`, they are linked, not downloaded again; so on a fresh pod where you also want to test, install ComfyUI first.
+Overrides are at the top of `setup.sh` (`PROJECT=` for another style name, `WORKDIR=`, `MODELS=`). If ComfyUI is already on the pod with these files in `/workspace/ComfyUI/models`, they are linked, not downloaded again. `--comfyui` clones ComfyUI to `/workspace/ComfyUI` (`COMFY=` to change) in its own venv, links the base, text encoder and VAE into its `models/` folders, and ends with a check that ComfyUI starts and finds the H3 Image nodes and those files.
 
 ## 3. Dataset
 
@@ -81,7 +84,7 @@ cd /workspace/minimax-h3-image-lora-training
   --stage /workspace/lora/mystyle/train
 ```
 
-It runs the checks from section 7 of the labeling guide (a caption per image, trigger once at the start, no style or quality words, 15 to 50 words, one line, no duplicates, short side 1024 px+, one report row per image) and exits with the list of failures. Only when everything passes does it replace the image + caption pairs in `train/` with the current ones, so panels rejected since the last run drop out. Train from `train/`, not `dataset/`: diffusion-pipe tries to load every file in its folder that is not a caption as an image, so `labels_report.csv` would stop it.
+macOS `._*` and `.DS_Store` files (left by copying from a Mac or unpacking a Mac zip) are ignored and never staged. It runs the checks from section 7 of the labeling guide (a caption per image, trigger once at the start, no style or quality words, 15 to 50 words, one line, no duplicates, short side 1024 px+, one report row per image) and exits with the list of failures. Only when everything passes does it replace the image + caption pairs in `train/` with the current ones, so panels rejected since the last run drop out. Train from `train/`, not `dataset/`: diffusion-pipe tries to load every file in its folder that is not a caption as an image, so `labels_report.csv` would stop it.
 
 ## 4. Configs
 
@@ -119,7 +122,7 @@ deepspeed --num_gpus=1 train.py --deepspeed --config /workspace/lora/mystyle/con
 
 ## 6. Test the epochs in ComfyUI
 
-You need a ComfyUI with MiniMax H3 Image support on this pod, at `/workspace/ComfyUI`, with an H3 Image workflow that has a LoRA loader.
+You need a ComfyUI with MiniMax H3 Image support on this pod, at `/workspace/ComfyUI`: `bash setup.sh --comfyui` installs one (it skips what is already done). Start it once training has finished, since it needs the GPU: `/workspace/ComfyUI/venv/bin/python /workspace/ComfyUI/main.py --listen 127.0.0.1 --port 8188`.
 
 Copy each saved LoRA under a name that says its epoch:
 
@@ -128,7 +131,13 @@ RUN=$(ls -td /workspace/lora/mystyle/output/*/ | head -n1)
 for d in "$RUN"epoch*/; do e=$(basename "$d"); cp "$d/adapter_model.safetensors" "/workspace/ComfyUI/models/loras/mystyle_$e.safetensors"; done
 ```
 
-Then in ComfyUI:
+Queue the same seed and prompt for every epoch, plus one render without the LoRA to compare against:
+
+```bash
+/workspace/lora/venv/bin/python tools/render_epochs.py --project mystyle     # --prompt, --seed, --strength to change
+```
+
+The images land in `/workspace/ComfyUI/output/mystyle_test/` (`no_lora_*.png`, `epoch2_*.png`, ...). The workflow it fills in is [workflows/h3_image_lora_test_api.json](workflows/h3_image_lora_test_api.json): the native H3 Image nodes, 6 steps, CFG 1, LoRA at strength 1.0. To do the same by hand in ComfyUI:
 
 1. Switch off any other LoRA while judging, so only your style is in the image.
 2. Load `mystyle_epochN.safetensors` at strength 1.0.
@@ -149,6 +158,8 @@ Keep the earliest epoch where the style holds on new subjects. Signs of too far:
 |---|---|
 | Killed, or out of memory after the caching phase | Text encoder RAM not freed: run the training command again; the cache is kept |
 | CUDA out of memory in training | Something else on the GPU (step 5), or not enough room: add `blocks_to_swap = 16` |
+| `setup.sh` warns `/workspace` is on the root filesystem | No volume at `/workspace`: attach one there, or check the free space it reports is enough |
+| `render_epochs.py` says a node or model file is missing | Update ComfyUI (`git -C /workspace/ComfyUI pull`), or run `bash setup.sh --comfyui` again to link the files |
 | Error opening `labels_report.csv` or another non-image file | Training from `dataset/`: train from `train/` (step 3) |
 | `int8` / `convrot` kernel errors | PyTorch is not a CUDA 13 build: `/workspace/lora/venv/bin/pip install --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130` |
 | DeepSpeed complains about NCCL | Prefix the command with `NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1` |

@@ -4,7 +4,8 @@
   python tools/check_captions.py DATASET --trigger mystyle
   python tools/check_captions.py DATASET --trigger mystyle --stage TRAIN_DIR
 
-Exits 1 when any check fails. --stage copies only image + caption pairs into TRAIN_DIR
+Exits 1 when any check fails. macOS metadata files (._* and .DS_Store) are ignored and never staged.
+--stage copies only image + caption pairs into TRAIN_DIR
 (TRAIN_DIR must be new, empty, or made by an earlier --stage, whose pairs are replaced; diffusion-pipe tries to open every non-caption file in its folder as an image, so labels_report.csv must stay out).
 """
 import argparse, csv, re, shutil, sys
@@ -21,6 +22,14 @@ BANNED = [
 ]
 
 
+def is_macos_junk(p):
+    return p.name.startswith("._") or p.name == ".DS_Store"
+
+
+def files(folder):
+    return [p for p in folder.iterdir() if p.is_file() and not is_macos_junk(p)]
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", type=Path)
@@ -32,8 +41,9 @@ def main():
     a = ap.parse_args()
 
     errors, seen = [], {}
-    images = sorted(p for p in a.dataset.iterdir() if p.is_file() and p.suffix.lower() in IMAGES)
-    captions = sorted(p for p in a.dataset.iterdir() if p.is_file() and p.suffix == ".txt")
+    junk = [p for p in a.dataset.iterdir() if is_macos_junk(p)]
+    images = sorted(p for p in files(a.dataset) if p.suffix.lower() in IMAGES)
+    captions = sorted(p for p in files(a.dataset) if p.suffix == ".txt")
     stems = {p.stem for p in images}
     prefix = f"{a.trigger}, "
 
@@ -79,11 +89,13 @@ def main():
         with report.open(newline="", encoding="utf-8") as f:
             rows = list(csv.DictReader(f))
         rejected = a.dataset / "rejected"
-        n_rej = sum(1 for p in rejected.iterdir() if p.suffix.lower() in IMAGES) if rejected.is_dir() else 0
+        n_rej = sum(1 for p in files(rejected) if p.suffix.lower() in IMAGES) if rejected.is_dir() else 0
         if len(rows) != len(images) + n_rej:
             errors.append(f"labels_report.csv: {len(rows)} rows for {len(images) + n_rej} images")
 
     print(f"{len(images)} images, {len(captions)} captions")
+    if junk:
+        print(f"ignored {len(junk)} macOS metadata files (._* or .DS_Store)")
     if len(images) < 30:
         print(f"warning: only {len(images)} images; 30 to 60 is the target for a style LoRA")
     for e in errors:
@@ -100,7 +112,7 @@ def main():
             sys.exit(f"{a.stage} is not empty and was not made by --stage; pick an empty or new folder")
         a.stage.mkdir(parents=True, exist_ok=True)
         for old in a.stage.iterdir():
-            if old.is_file() and (old.suffix.lower() in IMAGES or old.suffix == ".txt"):
+            if old.is_file() and (is_macos_junk(old) or old.suffix.lower() in IMAGES or old.suffix == ".txt"):
                 old.unlink()
         marker.write_text("{}\n", encoding="utf-8")
         for img in images:
