@@ -150,7 +150,7 @@ Keep the earliest epoch where the style holds on new subjects. Signs of too far:
 | Killed, or out of memory after the caching phase | Text encoder RAM not freed: run the training command again; the cache is kept |
 | CUDA out of memory in training | Something else on the GPU (step 5), or not enough room: add `blocks_to_swap = 16` |
 | Error opening `labels_report.csv` or another non-image file | Training from `dataset/`: train from `train/` (step 3) |
-| `int8` / `convrot` kernel errors | PyTorch is not a CUDA 13 build: `/workspace/lora/venv/bin/pip install --force-reinstall torch torchvision --index-url https://download.pytorch.org/whl/cu130` |
+| `int8` / `convrot` kernel errors | PyTorch is not a CUDA 13 build: `/workspace/lora/venv/bin/pip install --force-reinstall torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu130` |
 | DeepSpeed complains about NCCL | Prefix the command with `NCCL_P2P_DISABLE=1 NCCL_IB_DISABLE=1` |
 | Images need more steps or CFG with the LoRA | Distillation broke: check `merge_adapters` points at the Undistill adapter and that there is no `cfg` line |
 | Style too strong, same face everywhere | Earlier epoch, lower strength, or a more varied dataset |
