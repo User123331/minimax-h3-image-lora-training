@@ -165,11 +165,11 @@ if (( WITH_COMFY )); then
   for f in "${FILES[@]}"; do
     IFS='|' read -r repo src dst gb <<<"$f"
     [[ "$repo" == Comfy-Org/* ]] || continue   # the Undistill adapter is for training only
-    [[ -e "$COMFY_MODELS/$src" ]] && continue
-    mkdir -p "$(dirname "$COMFY_MODELS/$src")"
-    ln -s "$MODELS/$dst" "$COMFY_MODELS/$src"; echo "  linked $src"
+    [[ -e "$COMFY/models/$src" ]] && continue
+    mkdir -p "$(dirname "$COMFY/models/$src")"
+    ln -s "$MODELS/$dst" "$COMFY/models/$src"; echo "  linked $src"
   done
-  mkdir -p "$COMFY_MODELS/loras"
+  mkdir -p "$COMFY/models/loras"
   "$CPY" "$COMFY/main.py" --listen 127.0.0.1 --port 8189 ${COMFY_ARGS:-} >"$LORA_DIR/logs/comfyui_check.log" 2>&1 & cpid=$!
   "$PY" "$ROOT/tools/render_epochs.py" --server http://127.0.0.1:8189 --check --wait 300 \
     || { kill "$cpid" 2>/dev/null; die "ComfyUI check failed: see $LORA_DIR/logs/comfyui_check.log"; }
